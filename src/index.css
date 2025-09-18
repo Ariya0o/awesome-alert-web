@@ -1,0 +1,10 @@
+/* 根高度设置 */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: rgb(238, 240, 243);
+}
