@@ -1,236 +1,160 @@
-import { Drawer, Row, Col, Card, Typography, Button, Form, Input, Divider, Checkbox } from "antd";
-import React, { useState } from "react";
-import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  Drawer,
+  Row,
+  Col,
+  Card,
+  Typography,
+  Form,
+  Button,
+  Space,
+  Divider,
+  message,
+} from "antd";
+import React, { useState, useEffect } from "react";
 import PrometheusImage from "../../assets/prometheus.png";
 import ElasticSearchImage from "../../assets/elasticsearch.svg";
+import { PrometheusForm, ElasticSearchForm } from "./forms";
+import { testDataSource } from "../../api/dataSource";
 
 const { Title } = Typography;
-const { TextArea } = Input;
+
+const DATASOURCE_TYPES = {
+  Prometheus: {
+    label: "Prometheus",
+    image: PrometheusImage,
+    Component: PrometheusForm,
+  },
+  ElasticSearch: {
+    label: "ElasticSearch",
+    image: ElasticSearchImage,
+    Component: ElasticSearchForm,
+  },
+};
 
 export default function Create({ visible, onClose }) {
   const [form] = Form.useForm();
   const [selectedType, setSelectedType] = useState(null);
-  const [selectedDetails, setSelectedDetails] = useState(null);
+  const [loading, setLoading] = useState(false);
+  // 在Drawer内触发时，静态的message会挂载到document.body，容易被抽屉的遮罩层覆盖
+  const [messageApi, contextHolder] = message.useMessage();
+
+  // 抽屉关闭时重置状态
+  useEffect(() => {
+    if (!visible) {
+      form.resetFields();
+      setSelectedType(null);
+    }
+  }, [visible, form]);
 
   const handleSelectType = (type) => {
-    if (type === selectedType) {
-      setSelectedType(null);
-      setSelectedDetails(null);
-      form.resetFields(); // 清空表单
-    } else {
-      setSelectedType(type);
-      const selectedDatasource = datasourceTypes.find((ds) => ds.value === type);
-      setSelectedDetails(selectedDatasource);
-      form.resetFields(); // 切换类型时清空表单
+    const newType = selectedType === type ? null : type;
+    setSelectedType(newType);
+    form.resetFields();
+  };
+
+  const handleSubmit = async (values) => {
+    if (loading) return; // 防止重复提交
+
+    try {
+      setLoading(true);
+      const testData = {
+        type: selectedType,
+        config: values,
+      };
+      // 调用测试接口
+      messageApi.info("正在测试连接...");
+      const result = await testDataSource(testData);
+
+      if (result?.success) {
+        messageApi.success("测试成功！");
+
+        // 成功后关闭抽屉
+        onClose();
+      } else {
+        messageApi.error(result?.message || "测试失败");
+      }
+    } catch (error) {
+      messageApi.error("测试过程中发生错误");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const datasourceTypes = [
-    {
-      value: "Prometheus",
-      label: "Prometheus",
-      image: PrometheusImage,
-      form: (
-        <Form form={form} layout="vertical" onFinish={(values) => console.log("提交数据:", values)}>
-          <Form.Item
-            label="数据源名称"
-            name="name"
-            rules={[{ required: true, message: "请输入数据源名称" }]}
-          >
-            <Input placeholder="请输入数据源名称" />
-          </Form.Item>
-          <Form.Item label="备注" name="remark">
-            <TextArea rows={4} placeholder="请输入备注" />
-          </Form.Item>
-          <Divider />
-          <Form.Item
-            label="Prometheus URL"
-            name="url"
-            rules={[{ required: true, message: "请输入 Prometheus URL" }]}
-          >
-            <Input placeholder="请输入 Prometheus URL" />
-          </Form.Item>
-          <Divider />
-          <Form.List name="headers">
-            {(fields, { add, remove }) => (
-              <>
-                <label style={{ fontWeight: "500" }}>Headers</label>
-                {fields.map(({ key, name, ...restField }) => (
-                  <div key={key} style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, "key"]}
-                      rules={[{ required: true, message: "请输入 Key" }]}
-                      style={{ flex: 1, marginRight: 8 }}
-                    >
-                      <Input placeholder="Key" />
-                    </Form.Item>
-                    <Form.Item
-                      {...restField}
-                      name={[name, "value"]}
-                      rules={[{ required: true, message: "请输入 Value" }]}
-                      style={{ flex: 1, marginRight: 8 }}
-                    >
-                      <Input placeholder="Value" />
-                    </Form.Item>
-                    <MinusCircleOutlined
-                      style={{ fontSize: "16px", color: "#ff4d4f", cursor: "pointer" }}
-                      onClick={() => remove(name)}
-                    />
-                  </div>
-                ))}
-                <Form.Item>
-                  <Button
-                    type="dashed"
-                    onClick={() => add()}
-                    block
-                    icon={<PlusOutlined />}
-                  >
-                    添加 Header
-                  </Button>
-                </Form.Item>
-              </>
-            )}
-          </Form.List>
-          <Divider />
-          <Form.Item
-            name="authentication"
-            valuePropName="checked"
-            style={{ marginBottom: 0 }}
-          >
-            <Checkbox>启用认证</Checkbox>
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.authentication !== curr.authentication}>
-            {({ getFieldValue }) =>
-              getFieldValue("authentication") ? (
-                <div style={{ marginTop: 10 }}>
-                  <Form.Item
-                    label="用户名"
-                    name="username"
-                    rules={[{ required: true, message: "请输入用户名" }]}
-                  >
-                    <Input placeholder="请输入用户名" />
-                  </Form.Item>
-                  <Form.Item
-                    label="密码"
-                    name="password"
-                    rules={[{ required: true, message: "请输入密码" }]}
-                  >
-                    <Input.Password placeholder="请输入密码" />
-                  </Form.Item>
-                </div>
-              ) : null
-            }
-          </Form.Item>
-          <Divider />
-          <Form.Item name="skip_tls" valuePropName="checked">
-            <Checkbox>跳过 TLS 证书验证</Checkbox>
-          </Form.Item>
-          <Divider />
-          <Form.Item>
-            <div style={{ display: "flex", justifyContent: "flex-start", gap: "10px" }}>
-              <Button type="primary" htmlType="submit">
-                测试并保存
-              </Button>
-              <Button type="default" onClick={() => console.log("取消")}>
-                取消
-              </Button>
-            </div>
-          </Form.Item>
-        </Form>
-      ),
-    },
-    {
-      value: "ElasticSearch",
-      label: "ElasticSearch",
-      image: ElasticSearchImage,
-      form: (
-        <Form form={form} layout="vertical">
-        </Form>
-      ),
-    },
-  ];
+  const SelectedFormComponent = selectedType
+    ? DATASOURCE_TYPES[selectedType]?.Component
+    : null;
 
-  const renderDatasourceTypeCards = () => {
-    return (
+  return (
+    <Drawer title="添加数据源" open={visible} onClose={onClose} width="800px">
+      {contextHolder}
+      {/* 类型选择卡片 */}
       <div style={{ padding: "20px 0" }}>
         <Row gutter={[16, 16]}>
-          {datasourceTypes.map((dsType) => (
-            <Col xs={24} sm={12} md={8} key={dsType.value}>
+          {Object.entries(DATASOURCE_TYPES).map(([key, config]) => (
+            <Col xs={24} sm={12} md={8} key={key}>
               <Card
                 hoverable
-                onClick={() => handleSelectType(dsType.value)}
-                bodyStyle={{ padding: "0px" }}
+                onClick={() => handleSelectType(key)}
+                styles={{ body: { padding: "0px" } }}
                 style={{
                   padding: "3px",
                   textAlign: "center",
-                  position: "relative",
-                  borderColor:
-                    selectedType === dsType.value ? "#1890ff" : undefined,
+                  borderColor: selectedType === key ? "#1890ff" : undefined,
                   boxShadow:
-                    selectedType === dsType.value
+                    selectedType === key
                       ? "0 0 0 2px rgba(24,144,255,0.2)"
                       : undefined,
                 }}
               >
-                {selectedType === dsType.value && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "0",
-                      right: "0",
-                      width: "0",
-                      height: "0",
-                      borderStyle: "solid",
-                      borderWidth: "0 15px 15px 0",
-                      borderColor: "transparent #1890ff transparent transparent",
-                      zIndex: 1,
-                      borderTopRightRadius: "4px",
-                      overflow: "hidden",
-                    }}
-                  />
-                )}
-                {dsType.image && (
+                {config.image && (
                   <div
                     style={{
                       marginBottom: "10px",
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      height: "40%",
+                      height: "80px",
                     }}
                   >
                     <img
-                      src={dsType.image}
-                      alt={dsType.label}
+                      src={config.image}
+                      alt={config.label}
                       style={{
-                        width: "60%",
-                        height: "auto",
+                        width: "60px",
+                        height: "60px",
                         objectFit: "contain",
                       }}
                     />
                   </div>
                 )}
-                <div>
-                  <Title
-                    level={5}
-                    style={{ margin: "3px 0", textAlign: "center" }}
+                <Title
+                  level={5}
+                  style={{ margin: "3px 0", textAlign: "center" }}
+                >
+                  {config.label}
+                </Title>
+                {/* div绘制三角形高亮标识无意义，要么你找个图标要么就用简单的文字符号(tips for jimingyu) */}
+                {selectedType === key && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "8px",
+                      right: "8px",
+                      color: "#1890ff",
+                      fontSize: "20px",
+                    }}
                   >
-                    {dsType.label}
-                  </Title>
-                </div>
+                    ✓
+                  </div>
+                )}
               </Card>
             </Col>
           ))}
         </Row>
       </div>
-    );
-  };
 
-  return (
-    <Drawer title="添加数据源" open={visible} onClose={onClose} width="800px">
-      {renderDatasourceTypeCards()}
-      {selectedDetails && (
+      {/* 选中的表单 */}
+      {SelectedFormComponent && (
         <div
           style={{
             marginTop: "20px",
@@ -238,8 +162,23 @@ export default function Create({ visible, onClose }) {
             borderTop: "1px solid #f0f0f0",
           }}
         >
-          <Title level={5}>{selectedDetails.label}</Title>
-          {selectedDetails.form}
+          <Title level={5}>{DATASOURCE_TYPES[selectedType].label}</Title>
+          <SelectedFormComponent form={form} onSubmit={handleSubmit} />
+
+          <Divider />
+
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => form.submit()}
+              loading={loading}
+            >
+              测试并保存
+            </Button>
+            <Button onClick={onClose} disabled={loading}>
+              取消
+            </Button>
+          </Space>
         </div>
       )}
     </Drawer>
